@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ActiveMarkdownDocumentTracker } from "./activeMarkdownDocument";
+import { log, outputChannel } from "./log";
 import { WikilinkCompletionProvider } from "./providers/completionProvider";
 import { WikilinkDefinitionProvider } from "./providers/definitionProvider";
 import { WikilinkHoverProvider } from "./providers/hoverProvider";
@@ -9,6 +10,8 @@ import { findNoteFiles } from "./wikilinks";
 const MARKDOWN_SELECTOR: vscode.DocumentSelector = { language: "markdown" };
 
 export function activate(context: vscode.ExtensionContext): void {
+  context.subscriptions.push(outputChannel);
+  log("activate()");
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       MARKDOWN_SELECTOR,

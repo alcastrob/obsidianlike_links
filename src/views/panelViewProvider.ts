@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { ActiveMarkdownDocumentTracker } from "../activeMarkdownDocument";
+import { log } from "../log";
 import { computeToolData, ToolId } from "../toolData";
 
 interface WebviewMessage {
@@ -21,6 +22,8 @@ const TOOLS_NEEDING_ACTIVE_DOCUMENT: ToolId[] = ["backlinks", "outgoing", "outli
 export class PanelViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private selectedTool: ToolId = DEFAULT_TOOL;
+  /** Se incrementa en cada `postData()`; permite descartar respuestas de una petición anterior que resuelve tarde (p.ej. al cambiar de pestaña rápido). */
+  private requestSeq = 0;
 
   constructor(private readonly tracker: ActiveMarkdownDocumentTracker, context: vscode.ExtensionContext) {
     context.subscriptions.push(
@@ -93,12 +96,40 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
     if (!this.view) {
       return;
     }
-    const activeDocument = await this.tracker.getDocument();
-    const result = await computeToolData(this.selectedTool, activeDocument);
-    if (!activeDocument && TOOLS_NEEDING_ACTIVE_DOCUMENT.includes(this.selectedTool)) {
-      result.emptyMessage = `${result.emptyMessage} [diagnóstico: ${this.tracker.describeActiveTab()}]`;
+    const requestId = ++this.requestSeq;
+    const selectedTool = this.selectedTool;
+    log(`postData #${requestId}: tool=${selectedTool}`);
+    try {
+      const activeDocument = await this.tracker.getDocument();
+      const result = await computeToolData(selectedTool, activeDocument);
+      if (requestId !== this.requestSeq) {
+        // Llegó una petición más reciente (p.ej. cambio de pestaña) mientras esta calculaba; descartar para no pisar datos actuales con datos obsoletos.
+        log(`postData #${requestId}: descartada (obsoleta, ahora va #${this.requestSeq})`);
+        return;
+      }
+      if (!activeDocument && TOOLS_NEEDING_ACTIVE_DOCUMENT.includes(selectedTool)) {
+        result.emptyMessage = `${result.emptyMessage} [diagnóstico: ${this.tracker.describeActiveTab()}]`;
+      }
+      const labels = result.nodes.map((n) => n.label).join(" | ");
+      const textPreview = activeDocument?.getText().slice(0, 40).replace(/\n/g, "\\n");
+      log(
+        `postData #${requestId}: enviando ${result.nodes.length} nodos [${labels}] ` +
+          `(doc=${activeDocument?.uri.toString() ?? "ninguno"}, textLen=${activeDocument?.getText().length ?? "-"}, textStart="${textPreview}")`
+      );
+      void this.view.webview.postMessage({ type: "data", tool: selectedTool, ...result });
+    } catch (error) {
+      const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      log(`postData #${requestId}: ERROR calculando "${selectedTool}": ${message}`);
+      if (requestId === this.requestSeq) {
+        void this.view.webview.postMessage({
+          type: "data",
+          tool: selectedTool,
+          title: selectedTool,
+          nodes: [],
+          emptyMessage: `Error interno calculando esta herramienta. Revisa "View > Output > Obsidian-like Links". [diagnóstico: ${this.tracker.describeActiveTab()}]`,
+        });
+      }
     }
-    void this.view.webview.postMessage({ type: "data", tool: this.selectedTool, ...result });
   }
 }
 

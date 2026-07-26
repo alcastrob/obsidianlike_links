@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { log } from "./log";
 
 /** Extrae la Uri del archivo de una pestaña, sea cual sea el tipo de editor que la muestre. */
 function getTabUri(input: unknown): vscode.Uri | undefined {
@@ -26,24 +27,84 @@ function getTabUri(input: unknown): vscode.Uri | undefined {
  * contra `workspace.textDocuments`, para evitar falsos negativos por
  * diferencias de mayúsculas/codificación en la URI.
  */
+/**
+ * Tras un cambio de pestaña, VS Code (o el editor personalizado que la respalda)
+ * puede emitir varios `onDidChangeTabs` en rápida sucesión donde `activeTab` aún
+ * no refleja el estado final (visto en los logs: dos eventos a 49ms uno del otro,
+ * el segundo con la pestaña VIEJA como activa, sin un tercer evento que corrija).
+ * Por eso no basta con quedarnos solo con "la última respuesta gana" (async):
+ * hay que esperar a que el propio *tab model* se asiente antes de leerlo.
+ */
+const TAB_SETTLE_DELAY_MS = 150;
+
+/**
+ * Además, con el editor personalizado `vaultTool.markdownEditor` (extensión
+ * hermana "Obsidian like"), `onDidChangeTabs` a veces NO se dispara hasta varios
+ * segundos después del cambio visual de pestaña (visto en los logs: 5s de retraso),
+ * dejando el panel con datos del documento anterior todo ese tiempo. Como red de
+ * seguridad, se sondea la pestaña activa periódicamente en vez de depender solo
+ * de que VS Code dispare el evento a tiempo.
+ */
+const POLL_INTERVAL_MS = 400;
+
 export class ActiveMarkdownDocumentTracker {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
+  private lastNotifiedKey: string | undefined;
 
   constructor(context: vscode.ExtensionContext) {
+    const scheduleChange = (source: string) => {
+      log(`${source} — pendiente de asentarse`);
+      if (this.settleTimer) {
+        clearTimeout(this.settleTimer);
+      }
+      this.settleTimer = setTimeout(() => {
+        this.settleTimer = undefined;
+        this.checkActiveTab("evento");
+      }, TAB_SETTLE_DELAY_MS);
+    };
+    const pollTimer = setInterval(() => this.checkActiveTab("sondeo"), POLL_INTERVAL_MS);
     context.subscriptions.push(
-      vscode.window.tabGroups.onDidChangeTabGroups(() => this._onDidChange.fire()),
-      vscode.window.tabGroups.onDidChangeTabs(() => this._onDidChange.fire())
+      { dispose: () => this.settleTimer && clearTimeout(this.settleTimer) },
+      { dispose: () => clearInterval(pollTimer) },
+      vscode.window.tabGroups.onDidChangeTabGroups((e) => {
+        log(`onDidChangeTabGroups (opened=${e.opened.length}, closed=${e.closed.length}, changed=${e.changed.length})`);
+        scheduleChange("onDidChangeTabGroups");
+      }),
+      vscode.window.tabGroups.onDidChangeTabs((e) => {
+        log(`onDidChangeTabs (opened=${e.opened.length}, closed=${e.closed.length}, changed=${e.changed.length})`);
+        scheduleChange("onDidChangeTabs");
+      })
     );
+  }
+
+  /** Compara la pestaña activa actual con la última notificada; si difiere, dispara `onDidChange`. */
+  private checkActiveTab(source: string): void {
+    const uri = getTabUri(vscode.window.tabGroups.activeTabGroup?.activeTab?.input);
+    const key = uri?.toString() ?? "";
+    if (key === this.lastNotifiedKey) {
+      return;
+    }
+    log(`(${source}) pestaña activa cambió: "${this.lastNotifiedKey ?? "-"}" -> "${key || "(ninguna)"}"`);
+    this.lastNotifiedKey = key;
+    this._onDidChange.fire();
   }
 
   async getDocument(): Promise<vscode.TextDocument | undefined> {
     const uri = getTabUri(vscode.window.tabGroups.activeTabGroup?.activeTab?.input);
     if (!uri) {
+      log(`getDocument: sin uri (${this.describeActiveTab()})`);
       return undefined;
     }
-    const document = await vscode.workspace.openTextDocument(uri);
-    return document.languageId === "markdown" ? document : undefined;
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      log(`getDocument: uri=${uri.toString()} languageId=${document.languageId}`);
+      return document.languageId === "markdown" ? document : undefined;
+    } catch (error) {
+      log(`getDocument: openTextDocument("${uri.toString()}") lanzó un error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`);
+      throw error;
+    }
   }
 
   /** Info de diagnóstico sobre por qué no se detectó ningún documento Markdown activo. */

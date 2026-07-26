@@ -35,7 +35,7 @@ media/
   icon.svg                     Icono del contenedor en la barra de actividad
 ```
 
-> **Nota**: `vscode.window.activeTextEditor` pasa a `undefined` en cuanto el foco sale de un editor de texto (p. ej. al hacer clic en este mismo panel), así que las herramientas que dependen del "documento activo" no lo leen directamente — usan `ActiveMarkdownDocumentTracker`, que recuerda el último documento Markdown con foco y lo ignora cuando `activeTextEditor` se vuelve `undefined`.
+> **Nota**: `vscode.window.activeTextEditor` pasa a `undefined` en cuanto el foco sale de un editor de texto (p. ej. al hacer clic en este mismo panel), así que las herramientas que dependen del "documento activo" no lo leen directamente — usan `ActiveMarkdownDocumentTracker`, que recuerda el último documento Markdown con foco y lo ignora cuando `activeTextEditor` se vuelve `undefined`. Además, como los eventos de VS Code sobre la pestaña activa no siempre son fiables en timing con editores personalizados de otras extensiones (p. ej. el de la extensión hermana `obsidianlike`), el tracker no confía ciegamente en ellos: combina un pequeño retardo de "asentado" con un sondeo periódico como red de seguridad, para que el panel siempre acabe reflejando la pestaña realmente activa aunque el evento llegue tarde o de forma inconsistente.
 
 ## Desarrollo
 
@@ -63,3 +63,5 @@ Este proyecto es parte del monorepo de extensiones "Obsidian like"; `../obsidian
 ## Estado
 
 Esqueleto inicial en desarrollo. Próxima funcionalidad candidata: menciones sin enlazar (unlinked mentions).
+
+Corregido (2026-07-26): el panel a veces mostraba enlaces entrantes/salientes del documento equivocado al cambiar de pestaña rápido — condición de carrera al procesar las respuestas asíncronas, combinada con eventos de cambio de pestaña poco fiables en timing con el editor personalizado de la extensión hermana `obsidianlike` (que a su vez tenía un bug propio, también corregido, de autoguardado espurio al cambiar de pestaña sin editar nada). Ver detalle técnico en `CLAUDE.md`.
