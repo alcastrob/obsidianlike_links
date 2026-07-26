@@ -1,0 +1,65 @@
+# Obsidian-like Links
+
+Extensión de VS Code que trae a Markdown algunas funcionalidades de [Obsidian](https://obsidian.md) basadas en wikilinks (`[[nota]]`).
+
+## Funcionalidades
+
+- **Autocompletado de wikilinks**: al escribir `[[` se sugieren las notas del workspace.
+- **Navegación (Ctrl+Click / F12)**: salta desde un `[[wikilink]]` al archivo correspondiente.
+- **Vista previa al pasar el cursor (hover)**: muestra las primeras líneas de la nota enlazada.
+- **Panel "Obsidian-like Links"** (icono en la barra de actividad, se puede arrastrar a la barra lateral secundaria): un único panel con una barra de iconos horizontal arriba para cambiar de herramienta, y el contenido de la herramienta seleccionada ocupando el 100% del espacio vertical restante (igual que el panel de Obsidian):
+  - **Enlaces entrantes**: páginas que enlazan al documento con el foco actual.
+  - **Enlaces salientes**: páginas enlazadas desde el documento actual, incluyendo transclusiones (`![[nota]]`).
+  - **Etiquetas**: lista de todos los `#tags` utilizados en toda la bóveda (workspace), con los archivos donde aparece cada una.
+  - **Propiedades**: lista alfabética de las propiedades usadas en los frontmatters de la bóveda, con el número de veces que se ha usado cada una.
+  - **Esquema**: encabezados (`#`, `##`, `###`...) del documento activo, en orden de aparición y anidados según su nivel.
+- **Comando "Obsidian-like Links: Insertar enlace"**: inserta un `[[wikilink]]` eligiendo la nota desde un selector.
+
+## Estructura del proyecto
+
+```
+src/
+  extension.ts               Punto de entrada: registra providers, panel y comandos
+  activeMarkdownDocument.ts   Rastrea el último documento Markdown con foco (ver nota abajo)
+  wikilinks.ts                Utilidades de wikilinks (regex, búsqueda/resolución de notas)
+  markdownUtils.ts            Utilidades de Markdown (tags, frontmatter, encabezados)
+  toolData.ts                 Calcula los datos de cada herramienta (backlinks, outgoing, tags, properties, outline)
+  treeNode.ts                 Tipo de nodo serializable que se envía al webview
+  providers/
+    completionProvider.ts     Autocompletado de [[wikilinks]]
+    definitionProvider.ts     Ir a definición
+    hoverProvider.ts           Vista previa al hacer hover
+  views/
+    panelViewProvider.ts       Panel único (WebviewView): barra de iconos + contenido a pantalla completa
+media/
+  icon.svg                     Icono del contenedor en la barra de actividad
+```
+
+> **Nota**: `vscode.window.activeTextEditor` pasa a `undefined` en cuanto el foco sale de un editor de texto (p. ej. al hacer clic en este mismo panel), así que las herramientas que dependen del "documento activo" no lo leen directamente — usan `ActiveMarkdownDocumentTracker`, que recuerda el último documento Markdown con foco y lo ignora cuando `activeTextEditor` se vuelve `undefined`.
+
+## Desarrollo
+
+Requisitos: Node.js 20+ y VS Code.
+
+```bash
+npm install
+npm run compile   # o npm run watch
+```
+
+Para probar la extensión, abre este proyecto en VS Code y pulsa `F5` (lanza una nueva ventana "Extension Development Host" con la extensión cargada). Abre una carpeta con archivos `.md` que contengan `[[wikilinks]]` para ver las funcionalidades en acción.
+
+## Configuración
+
+- `obsidianlikeLinks.noteExtensions` (array, por defecto `["md"]`): extensiones de archivo consideradas notas al resolver wikilinks.
+
+## Empaquetar e instalar
+
+```bash
+npm run package    # genera obsidianlike-links-<version>.vsix con vsce
+```
+
+Este proyecto es parte del monorepo de extensiones "Obsidian like"; `../obsidianlike/make.bat` compila, desinstala e instala todas ellas (incluida esta) en el perfil de VS Code "Obsidian like".
+
+## Estado
+
+Esqueleto inicial en desarrollo. Próxima funcionalidad candidata: menciones sin enlazar (unlinked mentions).

@@ -1,0 +1,93 @@
+{
+  "name": "obsidianlike-links",
+  "displayName": "Obsidian-like Links",
+  "description": "Wikilinks estilo Obsidian ([[nota]]) para VS Code: autocompletado, navegación y vista previa.",
+  "version": "0.0.1",
+  "publisher": "angelCastro",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "obsidianlikeLinks.insertLink",
+        "title": "Obsidian-like Links: Insertar enlace"
+      },
+      {
+        "command": "obsidianlikeLinks.refresh",
+        "title": "Obsidian-like Links: Actualizar panel",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "obsidianlikeLinksContainer",
+          "title": "Obsidian-like Links",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "obsidianlikeLinksContainer": [
+        {
+          "type": "webview",
+          "id": "obsidianlikeLinks.panelView",
+          "name": "",
+          "contextualTitle": "Obsidian-like Links"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "obsidianlikeLinks.refresh",
+          "when": "view == obsidianlikeLinks.panelView",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Obsidian-like Links",
+      "properties": {
+        "obsidianlikeLinks.noteExtensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "md"
+          ],
+          "description": "Extensiones de archivo consideradas notas para resolver wikilinks."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts --no-color",
+    "pretest": "npm run compile && npm run lint",
+    "test": "node ./out/test/runTest.js",
+    "package": "npm run compile && vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.1",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
+    "@vscode/vsce": "^3.0.0",
+    "eslint": "^10.8.0",
+    "typescript": "^5.3.3"
+  }
+}

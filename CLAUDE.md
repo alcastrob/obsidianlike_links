@@ -1,0 +1,47 @@
+# CLAUDE.md
+
+Guía para Claude Code al trabajar en este repositorio.
+
+## Qué es este proyecto
+
+Extensión de VS Code (TypeScript) que replica funcionalidades de Obsidian basadas en wikilinks `[[nota]]` sobre archivos Markdown: autocompletado, navegación, hover preview, y un panel lateral tipo Obsidian (barra de iconos + contenido a pantalla completa) con 5 herramientas: Enlaces entrantes, Enlaces salientes, Etiquetas, Propiedades y Esquema.
+
+## Comandos
+
+```bash
+npm install        # instalar dependencias
+npm run compile     # compilar TypeScript (tsc -p ./)
+npm run watch        # compilar en modo watch
+npm run lint          # eslint sobre src/
+```
+
+Para probar manualmente: abrir el proyecto en VS Code y pulsar `F5` (task `npm: compile` se ejecuta como `preLaunchTask`, ver `.vscode/launch.json`). Esto abre una ventana "Extension Development Host"; abrir ahí una carpeta con `.md` que use `[[wikilinks]]`.
+
+No hay suite de tests automatizada todavía (el script `test` referencia `./out/test/runTest.js`, que aún no existe).
+
+## Arquitectura
+
+- `src/wikilinks.ts` es el módulo base de wikilinks: regex (`WIKILINK_REGEX`), búsqueda de notas en el workspace (`findNoteFiles`), resolución de nombre → archivo (`resolveNoteFile`), y extracción de wikilinks de un texto (`extractWikilinksDetailed`, distingue transclusiones `![[nota]]` de enlaces normales). Todo lo relacionado con enlaces depende de este módulo — si cambias el formato de wikilink soportado, hazlo aquí primero.
+- `src/markdownUtils.ts` es el módulo base para tags/frontmatter/encabezados: `extractTags`, `extractFrontmatterKeys`, `extractHeadings`. Todos ignoran el contenido dentro de bloques de código ` ``` ` (ver `stripFencedCodeBlocks`).
+- `src/providers/` implementa las interfaces estándar de la API de VS Code (`CompletionItemProvider`, `DefinitionProvider`, `HoverProvider`), registradas en `extension.ts` para el selector de lenguaje `markdown`.
+- `src/activeMarkdownDocument.ts` (`ActiveMarkdownDocumentTracker`) resuelve el documento Markdown de la **pestaña activa**. **No uses `vscode.window.activeTextEditor`** para esto: pasa a `undefined` en cuanto el foco sale de un editor de texto (incluido hacer clic en nuestro propio panel), y si el archivo ya estaba abierto/activo antes de que la extensión se active nunca llega un evento de cambio para él. En su lugar usa `vscode.window.tabGroups.activeTabGroup.activeTab`, que no depende del foco — y acepta cualquier tipo de pestaña con una `uri` (`TabInputText`, `TabInputCustom`, `TabInputNotebook`), no solo editores de texto plano: en esta "Obsidian like" profile, otra extensión hermana registra un editor personalizado para `.md`, así que las pestañas de nota suelen ser `TabInputCustom`, no `TabInputText`. `getDocument()` es async (usa `openTextDocument`, que no compara URIs a mano). Si vuelve a fallar la detección, `describeActiveTab()` da diagnóstico y `postData()` en `panelViewProvider.ts` lo añade al `emptyMessage` — mira eso antes de re-teorizar.
+- `src/toolData.ts` (`computeToolData`) calcula los datos de las 5 herramientas y los devuelve como `TreeNode[]` (definido en `src/treeNode.ts`) — una estructura serializable en JSON, sin nada de la API de VS Code, para poder enviarla a un webview por `postMessage`. Enlaces entrantes/salientes y Esquema dependen del documento activo (via el tracker); Etiquetas y Propiedades escanean toda la bóveda y son planas (sin `children`): un `TreeNode` puede llevar `searchQuery` en vez de `uri`, y en ese caso un click no abre un archivo sino que dispara una búsqueda (ver siguiente punto). Enlaces salientes excluye transclusiones de imagen (`![[foo.png]]`, ver `isImageFilename`/`IMAGE_EXTENSIONS`) — solo interesan las transclusiones de notas.
+- `src/views/panelViewProvider.ts` implementa `WebviewViewProvider` para el único view del panel (`obsidianlikeLinks.panelView`, `"type": "webview"` en `package.json`). El HTML/CSS/JS del webview vive inline en ese mismo archivo (sin bundler): la barra de iconos superior selecciona la herramienta (mensaje `selectTool` → recalcula con `computeToolData` → `postMessage` de vuelta) y el árbol se renderiza recursivamente ocupando el resto del alto. Un click en un nodo con `uri` envía `{type:'open',...}`; un click en un nodo con `searchQuery` (Etiquetas/Propiedades) envía `{type:'search', query}`, que el host reenvía como comando `obsidianlikeSearch.searchFor` a la extensión hermana `obsidianlike_search` (soft dependency: comprueba con `vscode.commands.getCommands` antes de ejecutar, y avisa si no está instalada). No hay TreeDataProvider/TreeView nativos de VS Code — se sustituyeron a propósito porque el usuario quería una barra de herramientas propia en vez del apilado estándar de vistas de VS Code.
+- **Integración cruzada con `obsidianlike_search`** (repo hermano, `D:\git\obsidianlike_search`): el comando `obsidianlikeSearch.searchFor(query: string)` (en `src/extension.ts` de ese repo) revela su view container y llama a `SearchViewProvider.runQuery(query)`, que hace `postMessage({command:'setQuery', query})` al webview de búsqueda (`media/main.js`, handler `setQuery`) — con handshake `pendingQuery`/`webviewReady` para no perder el mensaje si el webview aún no había cargado. La query usa la sintaxis del motor de búsqueda de ese repo (`src/searchEngine.ts`): `tag:valor` para etiquetas, `[clave]` para propiedades de frontmatter. Si cambias esa sintaxis allí, actualiza `toolData.ts` (`computeTags`/`computeProperties`) aquí.
+- `src/extension.ts` es el único punto donde se registran providers, el webview view y comandos (`activate`). Mantener este patrón: no registrar nada fuera de `activate`/`deactivate`.
+- La resolución de notas es por **nombre de archivo sin extensión**, sin distinguir mayúsculas/minúsculas (comportamiento estilo Obsidian). No hay soporte aún para rutas relativas ni para notas con nombres duplicados en distintas carpetas — si se añade, debe seguir viviendo en `wikilinks.ts`.
+- **ESLint**: usa flat config (`eslint.config.mjs`), no `.eslintrc.*` — el `package.json` de este proyecto fija `eslint@^10.8.0`, que requiere config plano. El script `lint` pasa `--no-color`: sin ese flag, el formateador `stylish` por defecto llama a `util.styleText`, que no existe en Node < 20.12 y revienta con `TypeError: util.styleText is not a function` aunque no haya errores de lint — es un problema del entorno/versión de Node, no del código.
+
+## Convenciones
+
+- La UI visible para el usuario (títulos de comandos, nombres de vistas, mensajes) está en español, siguiendo el idioma en que se definió el proyecto. El código (identificadores, comentarios) está en inglés/neutro salvo los textos de usuario.
+- Contribuciones nuevas de comandos/vistas van en `package.json` bajo `contributes`, y deben registrarse correspondientemente en `activate()`.
+- Comentarios solo cuando el porqué no es obvio; no documentar lo que el código ya expresa.
+
+## Monorepo hermano
+
+Este proyecto es una de varias extensiones "Obsidian like" en repos hermanos bajo `D:\git\` (`obsidianlike`, `obsidianlike_calendar`, `obsidianlike_search`, `obsidianlike_tasks`, etc.). `D:\git\obsidianlike\make.bat` compila (`npm run package`, que corre `vsce package`), desinstala e instala cada una en el perfil de VS Code `"Obsidian like"`. Si cambias el `name` o `version` en `package.json`, actualiza el bloque correspondiente en ese `make.bat` (nombre del `.vsix` e id `angelCastro.<name>`).
+
+## Estado
+
+Esqueleto inicial. Implementadas las 5 herramientas del panel: Enlaces entrantes, Enlaces salientes (con transclusiones), Etiquetas, Propiedades y Esquema — todas definidas explícitamente por el usuario a partir del comportamiento real de Obsidian, con UI propia (barra de iconos + panel a pantalla completa) en vez de vistas nativas de VS Code apiladas. Pendiente: menciones sin enlazar (unlinked mentions) en Enlaces entrantes.
