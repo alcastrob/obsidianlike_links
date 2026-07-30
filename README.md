@@ -65,3 +65,5 @@ Este proyecto es parte del monorepo de extensiones "Obsidian like"; `../obsidian
 Esqueleto inicial en desarrollo. Próxima funcionalidad candidata: menciones sin enlazar (unlinked mentions).
 
 Corregido (2026-07-26): el panel a veces mostraba enlaces entrantes/salientes del documento equivocado al cambiar de pestaña rápido — condición de carrera al procesar las respuestas asíncronas, combinada con eventos de cambio de pestaña poco fiables en timing con el editor personalizado de la extensión hermana `obsidianlike` (que a su vez tenía un bug propio, también corregido, de autoguardado espurio al cambiar de pestaña sin editar nada). Ver detalle técnico en `CLAUDE.md`.
+
+Corregido (2026-07-30): al pulsar una cabecera del Esquema no se hacía scroll hasta su posición en el documento. Ver detalle técnico en `CLAUDE.md`.

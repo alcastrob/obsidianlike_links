@@ -66,11 +66,7 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         break;
       case "open":
         if (message.uri) {
-          const uri = vscode.Uri.parse(message.uri);
-          const position = new vscode.Position(message.line ?? 0, 0);
-          await vscode.commands.executeCommand("vscode.open", uri, {
-            selection: new vscode.Range(position, position),
-          });
+          await this.openNote(vscode.Uri.parse(message.uri), message.line ?? 0);
         }
         break;
       case "search":
@@ -79,6 +75,29 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
         }
         break;
     }
+  }
+
+  /**
+   * Abre `uri` en la línea (0-based) indicada. Las notas se muestran con el
+   * editor personalizado `vaultTool.markdownEditor` de la extensión hermana
+   * `obsidianlike` (ver activeMarkdownDocument.ts), cuyo webview ignora la
+   * opción `selection` de `vscode.open` (esa opción solo la aplica el editor
+   * de texto plano). Por eso, si esa extensión está instalada, delegamos el
+   * scroll en su comando `vaultTool.openNoteAtLine(uri, line)` — soft
+   * dependency, igual que `obsidianlikeSearch.searchFor` en `runSearch()` —
+   * y si no está instalada caemos a `vscode.open`, que sí funciona para el
+   * editor de texto plano por defecto.
+   */
+  private async openNote(uri: vscode.Uri, line: number): Promise<void> {
+    const commands = await vscode.commands.getCommands(true);
+    if (commands.includes("vaultTool.openNoteAtLine")) {
+      await vscode.commands.executeCommand("vaultTool.openNoteAtLine", uri, line);
+      return;
+    }
+    const position = new vscode.Position(line, 0);
+    await vscode.commands.executeCommand("vscode.open", uri, {
+      selection: new vscode.Range(position, position),
+    });
   }
 
   private async runSearch(query: string): Promise<void> {
@@ -297,6 +316,15 @@ function getHtml(): string {
           twisty.innerHTML = collapsed.has(node.id)
             ? '<svg viewBox="0 0 10 10"><path d="M2 0l6 5-6 5z"/></svg>'
             : '<svg viewBox="0 0 10 10"><path d="M0 2l5 6 5-6z"/></svg>';
+          twisty.addEventListener("click", (event) => {
+            event.stopPropagation();
+            if (collapsed.has(node.id)) {
+              collapsed.delete(node.id);
+            } else {
+              collapsed.add(node.id);
+            }
+            renderCurrentData();
+          });
         }
         row.appendChild(twisty);
 
@@ -320,15 +348,6 @@ function getHtml(): string {
         }
 
         row.addEventListener("click", () => {
-          if (hasChildren) {
-            if (collapsed.has(node.id)) {
-              collapsed.delete(node.id);
-            } else {
-              collapsed.add(node.id);
-            }
-            renderCurrentData();
-            return;
-          }
           if (node.uri) {
             vscode.postMessage({ type: "open", uri: node.uri, line: node.line || 0 });
           } else if (node.searchQuery) {
