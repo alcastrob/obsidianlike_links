@@ -67,3 +67,5 @@ Esqueleto inicial en desarrollo. Próxima funcionalidad candidata: menciones sin
 Corregido (2026-07-26): el panel a veces mostraba enlaces entrantes/salientes del documento equivocado al cambiar de pestaña rápido — condición de carrera al procesar las respuestas asíncronas, combinada con eventos de cambio de pestaña poco fiables en timing con el editor personalizado de la extensión hermana `obsidianlike` (que a su vez tenía un bug propio, también corregido, de autoguardado espurio al cambiar de pestaña sin editar nada). Ver detalle técnico en `CLAUDE.md`.
 
 Corregido (2026-07-30): al pulsar una cabecera del Esquema no se hacía scroll hasta su posición en el documento. Ver detalle técnico en `CLAUDE.md`.
+
+Corregido (2026-08-02): en el panel de Etiquetas, (1) pulsar una etiqueta podía mostrar un falso aviso de que Obsidian-like Search no estaba instalada; (2) las etiquetas con acentos se truncaban (`#documentación` → `#documentaci`); (3) los códigos de color hex del highlight de `obsidianlike` (`background-color:#e3ff00;`) se listaban como si fueran etiquetas. Ver detalle técnico en `CLAUDE.md`.

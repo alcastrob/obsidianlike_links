@@ -84,9 +84,11 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
    * opción `selection` de `vscode.open` (esa opción solo la aplica el editor
    * de texto plano). Por eso, si esa extensión está instalada, delegamos el
    * scroll en su comando `vaultTool.openNoteAtLine(uri, line)` — soft
-   * dependency, igual que `obsidianlikeSearch.searchFor` en `runSearch()` —
-   * y si no está instalada caemos a `vscode.open`, que sí funciona para el
-   * editor de texto plano por defecto.
+   * dependency, comprobada aquí con `getCommands()` porque `obsidianlike` ya
+   * está activa siempre que se use este panel (es quien muestra la nota
+   * actual) — y si no está instalada caemos a `vscode.open`, que sí funciona
+   * para el editor de texto plano por defecto. (`runSearch()` no puede asumir
+   * lo mismo de `obsidianlike_search`, ver comentario allí.)
    */
   private async openNote(uri: vscode.Uri, line: number): Promise<void> {
     const commands = await vscode.commands.getCommands(true);
@@ -101,14 +103,28 @@ export class PanelViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async runSearch(query: string): Promise<void> {
-    const commands = await vscode.commands.getCommands(true);
-    if (!commands.includes("obsidianlikeSearch.searchFor")) {
-      void vscode.window.showWarningMessage(
-        "La extensión Obsidian-like Search no está instalada; no se puede buscar."
-      );
-      return;
+    // No se usa `getCommands()` para comprobar de antemano si el comando existe:
+    // una extensión contribuida pero aún no activada (p.ej. porque su vista
+    // nunca se ha abierto) puede no aparecer todavía en `getCommands()` aunque
+    // `executeCommand` sí la active correctamente bajo demanda — esa comprobación
+    // previa producía falsos negativos ("no está instalada") con la extensión
+    // instalada y activa. En su lugar se intenta ejecutar directamente y solo se
+    // avisa si de verdad falla.
+    try {
+      await vscode.commands.executeCommand("obsidianlikeSearch.searchFor", query);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`runSearch: ERROR ejecutando obsidianlikeSearch.searchFor: ${message}`);
+      if (/command.*not found/i.test(message)) {
+        void vscode.window.showWarningMessage(
+          "La extensión Obsidian-like Search no está instalada; no se puede buscar."
+        );
+      } else {
+        void vscode.window.showErrorMessage(
+          'Error al buscar en Obsidian-like Search. Revisa "View > Output > Obsidian-like Links".'
+        );
+      }
     }
-    await vscode.commands.executeCommand("obsidianlikeSearch.searchFor", query);
   }
 
   private async postData(): Promise<void> {

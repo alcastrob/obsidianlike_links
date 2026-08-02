@@ -19,7 +19,14 @@ export interface TagMatch {
   index: number;
 }
 
-const TAG_REGEX = /(^|[^\w#/])#([A-Za-z][\w/-]*)/g;
+// `\p{L}`/`\p{N}` (con flag `u`) en vez de `\w` para que las etiquetas con acentos
+// (#administración, #económico) no se trunquen en la primera letra no-ASCII.
+const TAG_REGEX = /(^|[^\p{L}\p{N}_#/])#([\p{L}][\p{L}\p{N}_/-]*)/gu;
+
+// Códigos de color hex (p.ej. `background-color:#e3ff00;` del highlight de
+// `obsidianlike`) no son etiquetas aunque tengan la forma de una: si justo antes
+// del `#` hay una declaración CSS `...color:`, se descarta el match.
+const CSS_COLOR_BEFORE_HASH = /[\w-]*color\s*:\s*$/i;
 
 /** Extrae etiquetas #tag de un texto (excluye encabezados y bloques de código). */
 export function extractTags(text: string): TagMatch[] {
@@ -29,6 +36,10 @@ export function extractTags(text: string): TagMatch[] {
   let match: RegExpExecArray | null;
   while ((match = TAG_REGEX.exec(clean)) !== null) {
     const tagStart = match.index + match[1].length;
+    const context = clean.slice(Math.max(0, tagStart - 30), tagStart);
+    if (CSS_COLOR_BEFORE_HASH.test(context)) {
+      continue;
+    }
     matches.push({ tag: match[2], index: tagStart });
   }
   return matches;
