@@ -2,7 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { extractFrontmatterKeys, extractHeadings, extractTags, HeadingMatch } from "./markdownUtils";
 import { TreeNode } from "./treeNode";
-import { extractWikilinksDetailed, findNoteFiles, resolveNoteFile, wikilinkTargetName } from "./wikilinks";
+import { extractWikilinksDetailed, findNoteFiles, noteNameKey, resolveNoteFile, wikilinkTargetName } from "./wikilinks";
 
 export type ToolId = "backlinks" | "outgoing" | "tags" | "properties" | "outline";
 
@@ -48,7 +48,7 @@ async function computeBacklinks(activeDocument: vscode.TextDocument | undefined)
     return { title, nodes: [], emptyMessage: "Abre un archivo Markdown para ver sus enlaces entrantes." };
   }
 
-  const targetName = path.basename(activeDocument.fileName, path.extname(activeDocument.fileName));
+  const targetName = noteNameKey(path.basename(activeDocument.fileName, path.extname(activeDocument.fileName)));
   const candidates = (await findNoteFiles()).filter(
     (note) => note.uri.toString() !== activeDocument.uri.toString()
   );
@@ -57,7 +57,7 @@ async function computeBacklinks(activeDocument: vscode.TextDocument | undefined)
   for (const candidate of candidates) {
     const sourceDocument = await vscode.workspace.openTextDocument(candidate.uri);
     const links = extractWikilinksDetailed(sourceDocument.getText()).filter(
-      (link) => wikilinkTargetName(link.noteName).toLowerCase() === targetName.toLowerCase()
+      (link) => noteNameKey(wikilinkTargetName(link.noteName)) === targetName
     );
     if (links.length === 0) {
       continue;

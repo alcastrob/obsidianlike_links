@@ -41,11 +41,23 @@ export function wikilinkTargetName(rawName: string): string {
     : lastSegment;
 }
 
+/**
+ * Clave canónica para comparar nombres de nota: ignora mayúsculas/minúsculas y
+ * aplica normalización Unicode NFC. Sin el NFC, un nombre de archivo en forma
+ * descompuesta (una `é` como `e` + acento combinado, habitual cuando el archivo
+ * viene de macOS) nunca iguala al mismo texto tecleado en un wikilink en forma
+ * precompuesta, aunque en pantalla se vean idénticos — Obsidian normaliza todas
+ * las rutas a NFC por este motivo. Úsalo en cualquier comparación de `noteName`.
+ */
+export function noteNameKey(name: string): string {
+  return name.normalize("NFC").toLowerCase();
+}
+
 /** Resuelve el archivo de nota cuyo nombre coincide (sin distinguir mayúsculas). */
 export async function resolveNoteFile(name: string): Promise<NoteFile | undefined> {
   const notes = await findNoteFiles();
-  const target = wikilinkTargetName(name).toLowerCase();
-  return notes.find((note) => note.name.toLowerCase() === target);
+  const target = noteNameKey(wikilinkTargetName(name));
+  return notes.find((note) => noteNameKey(note.name) === target);
 }
 
 export interface WikilinkAtPosition {
