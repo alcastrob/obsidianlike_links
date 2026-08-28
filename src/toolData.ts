@@ -2,7 +2,15 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { extractFrontmatterKeys, extractHeadings, extractTags, HeadingMatch } from "./markdownUtils";
 import { TreeNode } from "./treeNode";
-import { extractWikilinksDetailed, findNoteFiles, noteNameKey, resolveNoteFile, wikilinkTargetName } from "./wikilinks";
+import { log } from "./log";
+import {
+  describeCodepoints,
+  extractWikilinksDetailed,
+  findNoteFiles,
+  noteNameKey,
+  resolveNoteFile,
+  wikilinkTargetName,
+} from "./wikilinks";
 
 export type ToolId = "backlinks" | "outgoing" | "tags" | "properties" | "outline";
 
@@ -54,12 +62,23 @@ async function computeBacklinks(activeDocument: vscode.TextDocument | undefined)
   );
 
   const nodes: TreeNode[] = [];
+  const nearMisses = new Map<string, string>();
+  const alnum = (key: string) => key.replace(/[^\p{L}\p{N}]/gu, "");
+  const targetAlnum = alnum(targetName);
+
   for (const candidate of candidates) {
     const sourceDocument = await vscode.workspace.openTextDocument(candidate.uri);
     const links = extractWikilinksDetailed(sourceDocument.getText()).filter(
       (link) => noteNameKey(wikilinkTargetName(link.noteName)) === targetName
     );
+
     if (links.length === 0) {
+      for (const link of extractWikilinksDetailed(sourceDocument.getText())) {
+        const raw = wikilinkTargetName(link.noteName);
+        if (noteNameKey(raw) !== targetName && alnum(noteNameKey(raw)) === targetAlnum && !nearMisses.has(raw)) {
+          nearMisses.set(raw, vscode.workspace.asRelativePath(candidate.uri));
+        }
+      }
       continue;
     }
 
@@ -72,6 +91,13 @@ async function computeBacklinks(activeDocument: vscode.TextDocument | undefined)
       uri: candidate.uri.toString(),
       line: firstPosition.line,
     });
+  }
+
+  if (nearMisses.size > 0) {
+    log(`[backlinks] objetivo "${targetName}" -> ${describeCodepoints(targetName)}`);
+    for (const [raw, where] of nearMisses) {
+      log(`[backlinks] casi-coincidencia en ${where}: "${raw}" -> ${describeCodepoints(noteNameKey(raw))}`);
+    }
   }
 
   return { title, nodes, emptyMessage: nodes.length === 0 ? "No se encontraron enlaces entrantes." : undefined };

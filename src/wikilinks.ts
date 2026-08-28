@@ -42,15 +42,35 @@ export function wikilinkTargetName(rawName: string): string {
 }
 
 /**
- * Clave canónica para comparar nombres de nota: ignora mayúsculas/minúsculas y
- * aplica normalización Unicode NFC. Sin el NFC, un nombre de archivo en forma
- * descompuesta (una `é` como `e` + acento combinado, habitual cuando el archivo
- * viene de macOS) nunca iguala al mismo texto tecleado en un wikilink en forma
- * precompuesta, aunque en pantalla se vean idénticos — Obsidian normaliza todas
- * las rutas a NFC por este motivo. Úsalo en cualquier comparación de `noteName`.
+ * Clave canónica para comparar nombres de nota. Dos nombres que en pantalla se
+ * ven idénticos pueden diferir en bytes y romper una comparación `===`; esta
+ * función neutraliza los casos que hemos visto en bóvedas reales:
+ * - **Normalización Unicode NFC**: un nombre de archivo en forma descompuesta
+ *   (`é` como `e` + acento combinado, habitual si el archivo viene de macOS) vs.
+ *   el mismo texto precompuesto en el wikilink. Obsidian normaliza a NFC igual.
+ * - **Selectores de variación y caracteres de ancho cero** (`U+FE0E`/`U+FE0F`,
+ *   `U+200B`–`U+200D`, `U+2060`, `U+FEFF`): un emoji en el nombre puede llevar o
+ *   no el selector `U+FE0F` según cómo se tecleara; son invisibles y se descartan.
+ * - **Espacios**: cualquier espacio Unicode (incluido el duro `U+00A0`, que
+ *   produce Opción+Espacio en Mac) se colapsa a un espacio normal.
+ * Úsalo en cualquier comparación de `noteName`.
  */
+const IGNORABLE_IN_NAME = /[︎️​‌‍⁠﻿]/g;
+
 export function noteNameKey(name: string): string {
-  return name.normalize("NFC").toLowerCase();
+  return name
+    .normalize("NFC")
+    .replace(IGNORABLE_IN_NAME, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+/** Lista los code points de un string en hex, para diagnóstico en `log.ts`. */
+export function describeCodepoints(value: string): string {
+  return Array.from(value)
+    .map((ch) => "U+" + (ch.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0"))
+    .join(" ");
 }
 
 /** Resuelve el archivo de nota cuyo nombre coincide (sin distinguir mayúsculas). */
