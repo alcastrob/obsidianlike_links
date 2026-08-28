@@ -69,3 +69,5 @@ Corregido (2026-07-26): el panel a veces mostraba enlaces entrantes/salientes de
 Corregido (2026-07-30): al pulsar una cabecera del Esquema no se hacía scroll hasta su posición en el documento. Ver detalle técnico en `CLAUDE.md`.
 
 Corregido (2026-08-02): en el panel de Etiquetas, (1) pulsar una etiqueta podía mostrar un falso aviso de que Obsidian-like Search no estaba instalada; (2) las etiquetas con acentos se truncaban (`#documentación` → `#documentaci`); (3) los códigos de color hex del highlight de `obsidianlike` (`background-color:#e3ff00;`) se listaban como si fueran etiquetas. Ver detalle técnico en `CLAUDE.md`.
+
+Corregido (2026-08-28): un wikilink con directorio (`[[carpeta/nota]]`, y también `[[carpeta/nota.md]]`) no se contabilizaba como enlace entrante, y tampoco resolvía para navegación, hover ni Enlaces salientes. Ahora el destino del wikilink se normaliza a su nombre de nota (se descarta el directorio y una extensión de nota final) antes de resolver o comparar. Ver detalle técnico en `CLAUDE.md`.

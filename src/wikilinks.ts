@@ -27,10 +27,24 @@ export async function findNoteFiles(): Promise<NoteFile[]> {
   }));
 }
 
+/**
+ * Normaliza el destino de un wikilink a su nombre de nota resoluble: Obsidian
+ * admite `[[carpeta/nota]]` y `[[carpeta/nota.md]]` además de `[[nota]]`, pero
+ * la resolución aquí es por nombre de archivo sin extensión, así que se descarta
+ * el directorio y una extensión de nota final si la hubiera.
+ */
+export function wikilinkTargetName(rawName: string): string {
+  const lastSegment = rawName.trim().split(/[/\\]/).pop() ?? "";
+  const ext = path.extname(lastSegment).slice(1).toLowerCase();
+  return ext && getNoteExtensions().includes(ext)
+    ? lastSegment.slice(0, -(ext.length + 1))
+    : lastSegment;
+}
+
 /** Resuelve el archivo de nota cuyo nombre coincide (sin distinguir mayúsculas). */
 export async function resolveNoteFile(name: string): Promise<NoteFile | undefined> {
   const notes = await findNoteFiles();
-  const target = name.trim().toLowerCase();
+  const target = wikilinkTargetName(name).toLowerCase();
   return notes.find((note) => note.name.toLowerCase() === target);
 }
 

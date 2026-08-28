@@ -2,7 +2,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { extractFrontmatterKeys, extractHeadings, extractTags, HeadingMatch } from "./markdownUtils";
 import { TreeNode } from "./treeNode";
-import { extractWikilinksDetailed, findNoteFiles, resolveNoteFile } from "./wikilinks";
+import { extractWikilinksDetailed, findNoteFiles, resolveNoteFile, wikilinkTargetName } from "./wikilinks";
 
 export type ToolId = "backlinks" | "outgoing" | "tags" | "properties" | "outline";
 
@@ -57,7 +57,7 @@ async function computeBacklinks(activeDocument: vscode.TextDocument | undefined)
   for (const candidate of candidates) {
     const sourceDocument = await vscode.workspace.openTextDocument(candidate.uri);
     const links = extractWikilinksDetailed(sourceDocument.getText()).filter(
-      (link) => link.noteName.toLowerCase() === targetName.toLowerCase()
+      (link) => wikilinkTargetName(link.noteName).toLowerCase() === targetName.toLowerCase()
     );
     if (links.length === 0) {
       continue;
